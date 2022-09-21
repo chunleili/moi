@@ -1,6 +1,18 @@
 import taichi as ti
 
 
+TypeNone = 2 << 0
+TypeFluid = 2 << 1
+TypeObstacle = 2 << 2
+TypeEmpty = 2 << 3
+TypeInflow = 2 << 4
+TypeOutflow = 2 << 5
+TypeOpen = 2 << 6
+TypeInterface = 2 << 7
+TypeFreeSlip = 2 << 8   # for LBM
+TypeNoSlip = 2 << 9     # for LBM
+
+
 @ti.data_oriented
 class GridBase:
     """
@@ -38,6 +50,20 @@ class GridBase:
             k: 下标k
         """
         return self.size_x * self.size_y * k + self.size_x * j + i
+
+    @ti.func
+    def check_ijk(self, i: ti.i32, j: ti.i32, k: ti.i32):
+        """
+        检查下标是否合法
+        """
+        result = True
+        if i < 0 or i > self.size_x - 1:
+            result = False
+        elif j < 0 or j > self.size_y - 1:
+            result = False
+        elif k < 0 or k > self.size_z - 1:
+            result = False
+        return result
 
     @ti.kernel
     def set_const(self, val: ti.template()):
@@ -84,7 +110,7 @@ class GridBase:
 
 
 @ti.data_oriented
-class GridInt(GridBase):
+class IntGrid(GridBase):
     """
     整数场
     """
@@ -94,7 +120,52 @@ class GridInt(GridBase):
 
 
 @ti.data_oriented
-class GridReal(GridBase):
+class FlagGrid(IntGrid):
+    """
+    网格类型场
+    """
+    def __init__(self, size_x: ti.i32, size_y: ti.i32, size_z: ti.i32):
+        super().__init__(size_x, size_y, size_z)
+
+    @ti.func
+    def is_fluid(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        return self.data[i, j, k] & TypeFluid
+
+    @ti.func
+    def is_empty(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        return self.data[i, j, k] & TypeEmpty
+
+    @ti.func
+    def is_obstacle(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        return self.data[i, j, k] & TypeObstacle
+
+    @ti.func
+    def is_outflow(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        return self.data[i, j, k] & TypeOutflow
+
+    @ti.func
+    def is_inflow(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        return self.data[i, j, k] & TypeInflow
+
+    @ti.func
+    def is_interface(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        return self.data[i, j, k] & TypeInterface
+
+    @ti.func
+    def is_open(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        return self.data[i, j, k] & TypeOpen
+
+    @ti.func
+    def is_free_slip(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        return self.data[i, j, k] & TypeFreeSlip
+
+    @ti.func
+    def is_no_slip(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        return self.data[i, j, k] & TypeNoSlip
+
+
+@ti.data_oriented
+class RealGrid(GridBase):
     """
     实数场
     """
@@ -115,7 +186,7 @@ class Grid4D(GridBase):
 
 
 @ti.data_oriented
-class GridVec3:
+class Vec3Grid(GridBase):
     """
     三维场
     """
@@ -141,8 +212,9 @@ class GridVec3:
             if length_b < length_a:
                 self.data[i, j, k] = b.data[i, j, k]
 
+
 @ti.data_oriented
-class MACGrid:
+class MACGrid(GridBase):
     def __init__(self, size_x: ti.i32, size_y: ti.i32, size_z: ti.i32):
         self.size_x = size_x
         self.size_y = size_y
@@ -150,20 +222,6 @@ class MACGrid:
         self.x = ti.field(dtype=float, shape=(size_x + 1, size_y, size_z))
         self.y = ti.field(dtype=float, shape=(size_x, size_y + 1, size_z))
         self.z = ti.field(dtype=float, shape=(size_x, size_y, size_z + 1))
-
-    @ti.func
-    def check_ijk(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
-        """
-        检查场x的下标是否合法
-        """
-        result = True
-        if i < 0 or i > self.size_x:
-            result = False
-        elif j < 0 or j > self.size_y - 1:
-            result = False
-        elif k < 0 or k > self.size_z - 1:
-            result = False
-        return result
 
     @ti.func
     def get_mac_x(self, i: ti.i32, j: ti.i32, k: ti.i32):
@@ -202,7 +260,7 @@ class MACGrid:
         return val
 
     @ti.func
-    def get_val(self, i: ti.i32, j: ti.i32, k: ti.i32):
+    def get_center_val(self, i: ti.i32, j: ti.i32, k: ti.i32):
         """
         获得中心网格（cell-centered grid）i，j，k位置的值
         """
