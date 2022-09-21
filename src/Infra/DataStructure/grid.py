@@ -104,7 +104,18 @@ class GridReal(GridBase):
 
 
 @ti.data_oriented
-class GridVec3(GridBase):
+class Grid4D(GridBase):
+    """
+    4维场
+    """
+    def __init__(self, size_x: ti.i32, size_y: ti.i32, size_z: ti.i32, q: ti.i32):
+        super().__init__(size_x, size_y, size_z, float)
+        self.q = q
+        ti.root.dense(ti.ijkl, (size_x, size_y, size_z, q)).place(self.data)
+
+
+@ti.data_oriented
+class GridVec3:
     """
     三维场
     """
@@ -130,15 +141,73 @@ class GridVec3(GridBase):
             if length_b < length_a:
                 self.data[i, j, k] = b.data[i, j, k]
 
-
 @ti.data_oriented
-class Grid4D(GridBase):
-    """
-    4维场
-    """
-    def __init__(self, size_x: ti.i32, size_y: ti.i32, size_z: ti.i32, q: ti.i32):
-        super().__init__(size_x, size_y, size_z, float)
-        self.q = q
-        ti.root.dense(ti.ijkl, (size_x, size_y, size_z, q)).place(self.data)
+class MACGrid:
+    def __init__(self, size_x: ti.i32, size_y: ti.i32, size_z: ti.i32):
+        self.size_x = size_x
+        self.size_y = size_y
+        self.size_z = size_z
+        self.x = ti.field(dtype=float, shape=(size_x + 1, size_y, size_z))
+        self.y = ti.field(dtype=float, shape=(size_x, size_y + 1, size_z))
+        self.z = ti.field(dtype=float, shape=(size_x, size_y, size_z + 1))
 
+    @ti.func
+    def check_ijk(self, i: ti.i32, j: ti.i32, k: ti.i32) -> bool:
+        """
+        检查场x的下标是否合法
+        """
+        result = True
+        if i < 0 or i > self.size_x:
+            result = False
+        elif j < 0 or j > self.size_y - 1:
+            result = False
+        elif k < 0 or k > self.size_z - 1:
+            result = False
+        return result
 
+    @ti.func
+    def get_mac_x(self, i: ti.i32, j: ti.i32, k: ti.i32):
+        """
+        获得x场i，j，k位置的3维值
+        """
+        ti.static_assert(self.check_ijk(i, j, k))
+        val = ti.Vector([0.0, 0.0, 0.0])
+        val[0] = self.x[i, j, k]
+        val[1] = (self.y[i, j, k] + self.y[i, j + 1, k] + self.y[i - 1, j, k] + self.y[i - 1, j + 1, k]) * 0.25
+        val[2] = (self.z[i, j, k] + self.z[i, j, k + 1] + self.z[i - 1, j, k] + self.z[i - 1, j, k + 1]) * 0.25
+        return val
+
+    @ti.func
+    def get_mac_y(self, i: ti.i32, j: ti.i32, k: ti.i32):
+        """
+        获得y场i，j，k位置的3维值
+        """
+        ti.static_assert(self.check_ijk(i, j, k))
+        val = ti.Vector([0.0, 0.0, 0.0])
+        val[0] = (self.x[i, j - 1, k] + self.x[i + 1, j - 1, k] + self.x[i, j, k] + self.x[i + 1, j, k]) * 0.25
+        val[1] = self.y[i, j, k]
+        val[2] = (self.z[i, j - 1, k] + self.z[i, j - 1, k + 1] + self.z[i, j, k] + self.z[i, j, k + 1]) * 0.25
+        return val
+
+    @ti.func
+    def get_mac_z(self, i: ti.i32, j: ti.i32, k: ti.i32):
+        """
+        获得z场i，j，k位置的3维值
+        """
+        ti.static_assert(self.check_ijk(i, j, k))
+        val = ti.Vector([0.0, 0.0, 0.0])
+        val[0] = (self.x[i, j, k - 1] + self.x[i + 1, j, k - 1] + self.x[i, j, k] + self.x[i + 1, j, k]) * 0.25
+        val[1] = (self.y[i, j, k - 1] + self.y[i, j + 1, k - 1] + self.y[i, j, k] + self.y[i, j + 1, k]) * 0.25
+        val[2] = self.z[i, j, k]
+        return val
+
+    @ti.func
+    def get_val(self, i: ti.i32, j: ti.i32, k: ti.i32):
+        """
+        获得中心网格（cell-centered grid）i，j，k位置的值
+        """
+        val = ti.Vector([0.0, 0.0, 0.0])
+        val[0] = (self.x[i, j, k] + self.x[i + 1, j, k]) * 0.5
+        val[1] = (self.y[i, j, k] + self.y[i, j + 1, k]) * 0.5
+        val[2] = (self.z[i, j, k] + self.z[i, j, k + 1]) * 0.5
+        return val
