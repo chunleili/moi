@@ -21,7 +21,7 @@ print("读入ply完毕，输出output_ply.txt")
 #打印BoundingBox
 from find_boundingBox import find_boundingBox
 min_x, min_y, min_z, max_x, max_y, max_z = find_boundingBox(points)
-print(f"min_x:{min_x}\nmin_y:{min_y}\nmin_z:{min_z}\nmax_x:{max_x}\nmax_y:{max_y}\nmax_z:{max_z}\n")
+print(f"min_x: {min_x}\nmin_y: {min_y}\nmin_z: {min_z}\nmax_x: {max_x}\nmax_y: {max_y}\nmax_z: {max_z}\n")
 
 # # 再输出ply（尚未完成）
 # from write_ply import write_ply
