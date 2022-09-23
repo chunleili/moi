@@ -2,3 +2,4 @@ __pycache__
 .vscode
 .vs
 output_*.txt
+.idea
