@@ -1,6 +1,6 @@
 import math
 
-from Infra.DataStructure.grid import *
+from Infra.data_structure.grid import *
 import taichi as ti
 import numpy as np
 
