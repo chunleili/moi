@@ -1,6 +1,7 @@
 from grid import IntGrid
 from grid import RealGrid
 from grid import Vec3Grid
+from grid import MACGrid
 import taichi as ti
 
 ti.init(arch=ti.cuda)
@@ -27,6 +28,12 @@ def test_grid():
     grid_vec3_2.print_data()
     grid_vec3_2.join(grid_vec3_1)
     grid_vec3_2.print_data()
+
+    grid_mac = MACGrid(4, 5, 6)
+    grid_mac.x[2, 2, 2] = 3
+
+    grid_real1.data[1, 1, 1] = 2
+
 
 
 test_grid()

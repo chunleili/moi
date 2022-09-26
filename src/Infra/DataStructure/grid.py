@@ -11,6 +11,8 @@ TypeOpen = 2 << 6
 TypeInterface = 2 << 7
 TypeFreeSlip = 2 << 8   # for LBM
 TypeNoSlip = 2 << 9     # for LBM
+TypeInterfaceToFluid = 2 << 10
+TypeInterfaceToEmpty = 2 << 11
 
 
 @ti.data_oriented
@@ -102,6 +104,10 @@ class GridBase:
         """
         for i in ti.grouped(self.data):
             self.data[i] += val
+
+    @ti.func
+    def __getitem__(self, i, j, k):
+        return self.data[i, j, k]
 
     @ti.kernel
     def print_data(self):
