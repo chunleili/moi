@@ -116,7 +116,7 @@ class GridBase:
 
 
 @ti.data_oriented
-class IntGrid(GridBase):
+class GridInt(GridBase):
     """
     整数场
     """
@@ -126,7 +126,7 @@ class IntGrid(GridBase):
 
 
 @ti.data_oriented
-class FlagGrid(IntGrid):
+class GridFlag(GridInt):
     """
     网格类型场
     """
@@ -171,7 +171,7 @@ class FlagGrid(IntGrid):
 
 
 @ti.data_oriented
-class RealGrid(GridBase):
+class GridReal(GridBase):
     """
     实数场
     """
@@ -192,7 +192,7 @@ class Grid4D(GridBase):
 
 
 @ti.data_oriented
-class Vec3Grid(GridBase):
+class GridVec3(GridBase):
     """
     三维场
     """
@@ -220,7 +220,7 @@ class Vec3Grid(GridBase):
 
 
 @ti.data_oriented
-class MACGrid(GridBase):
+class GridMac(GridBase):
     def __init__(self, size_x: ti.i32, size_y: ti.i32, size_z: ti.i32):
         self.size_x = size_x
         self.size_y = size_y

@@ -50,7 +50,7 @@ vec19 = ti.types.vector(19, float)
 
 
 @ti.data_oriented
-class LBMSolver:
+class LbmSolver:
     def __init__(self, tau, res, gravity, smag_constant):
         weight.from_numpy(w)
         e.from_numpy(e_)
@@ -62,12 +62,12 @@ class LBMSolver:
         # field
         self.collision_field = Grid4D(res[0], res[1], res[2], Q)
         self.stream_field = Grid4D(res[0], res[1], res[2], Q)
-        self.mass = RealGrid(res[0], res[1], res[2])
-        self.fraction = RealGrid(res[0], res[1], res[2])
-        self.flag = FlagGrid(res[0], res[1], res[2])
-        self.neighbor = IntGrid(res[0], res[1], res[2])
-        self.mass_change = RealGrid(res[0], res[1], res[2])  # used for distribute mass
-        self.excess_mass = RealGrid(res[0], res[1], res[2])  # used for distribute mass
+        self.mass = GridReal(res[0], res[1], res[2])
+        self.fraction = GridReal(res[0], res[1], res[2])
+        self.flag = GridFlag(res[0], res[1], res[2])
+        self.neighbor = GridInt(res[0], res[1], res[2])
+        self.mass_change = GridReal(res[0], res[1], res[2])  # used for distribute mass
+        self.excess_mass = GridReal(res[0], res[1], res[2])  # used for distribute mass
 
         # gravity
         self.gravity = ti.field(dtype=float, shape=3)
@@ -199,18 +199,16 @@ class LBMSolver:
             nei_i = i + e[q, 0]
             nei_j = j + e[q, 1]
             nei_k = k + e[q, 2]
-            if nei_i == i and nei_j == j and nei_k == k:
-                continue
-
-            # compute average density and velocity
-            if self.flag.data[nei_i, nei_j, nei_k] & (TypeFluid | TypeInterface | TypeInterfaceToFluid):
-                neigh_density = self.get_density(nei_i, nei_j, nei_k)
-                neigh_vel = self.get_vel(nei_i, nei_j, nei_k, neigh_density)
-                num_neighs += 1
-                avg_density += neigh_density
-                avg_vel[0] += neigh_vel[0]
-                avg_vel[1] += neigh_vel[1]
-                avg_vel[2] += neigh_vel[2]
+            if not (nei_i == i and nei_j == j and nei_k == k):
+                # compute average density and velocity
+                if self.flag.data[nei_i, nei_j, nei_k] & (TypeFluid | TypeInterface | TypeInterfaceToFluid):
+                    neigh_density = self.get_density(nei_i, nei_j, nei_k)
+                    neigh_vel = self.get_vel(nei_i, nei_j, nei_k, neigh_density)
+                    num_neighs += 1
+                    avg_density += neigh_density
+                    avg_vel[0] += neigh_vel[0]
+                    avg_vel[1] += neigh_vel[1]
+                    avg_vel[2] += neigh_vel[2]
 
         # ti.static_assert(num_neighs != 0)
         avg_density /= num_neighs
@@ -261,16 +259,14 @@ class LBMSolver:
             nei_i = i + e[q, 0]
             nei_j = j + e[q, 1]
             nei_k = k + e[q, 2]
-            if i == nei_i and j == nei_j and k == nei_k or ~(self.flag.data[nei_i, nei_j, nei_k] & TypeInterface):
-                continue
+            if not (i == nei_i and j == nei_j and k == nei_k or ~(self.flag.data[nei_i, nei_j, nei_k] & TypeInterface)):
+                weights_backup[q] = 1.0
+                dot_product = normal[0] * e[q, 0] + normal[1] * e[q, 1] + normal[2] * e[q, 2]
 
-            weights_backup[q] = 1.0
-            dot_product = normal[0] * e[q, 0] + normal[1] * e[q, 1] + normal[2] * e[q, 2]
-
-            if change_type == FILLED:
-                weights[q] = ti.math.max(0.0, dot_product)
-            else:
-                weights[q] = -ti.math.min(0.0, dot_product)
+                if change_type == FILLED:
+                    weights[q] = ti.math.max(0.0, dot_product)
+                else:
+                    weights[q] = -ti.math.min(0.0, dot_product)
             # ti.static_assert(weights[q] >= 0.0)
 
         # calculate normalizer
@@ -319,12 +315,11 @@ class LBMSolver:
             nei_i = i + e[q, 0]
             nei_j = j + e[q, 1]
             nei_k = k + e[q, 2]
-            if nei_i <= 0 or nei_j <= 0 or nei_k <= 0 or nei_i >= self.nx - 1 or nei_j >= self.ny - 1 or nei_k >= self.nz - 1:
-                continue
-            inv = self.inverse_q(q)
-            self.collision_field.data[i, j, k, q] = self.collision_field.data[nei_i, nei_j, nei_k, inv]
-            if self.flag.data[nei_i, nei_j, nei_k] & TypeEmpty:
-                self.collision_field.data[i, j, k, q] = 0.0
+            if not (nei_i <= 0 or nei_j <= 0 or nei_k <= 0 or nei_i >= self.nx - 1 or nei_j >= self.ny - 1 or nei_k >= self.nz - 1):
+                inv = self.inverse_q(q)
+                self.collision_field.data[i, j, k, q] = self.collision_field.data[nei_i, nei_j, nei_k, inv]
+                if self.flag.data[nei_i, nei_j, nei_k] & TypeEmpty:
+                    self.collision_field.data[i, j, k, q] = 0.0
 
     @ti.kernel
     def collide(self):
@@ -393,18 +388,16 @@ class LBMSolver:
                     nei_i = i + e[q, 0]
                     nei_j = j + e[q, 1]
                     nei_k = k + e[q, 2]
-                    if i == nei_i and j == nei_j and k == nei_k:
-                        continue
-
-                    if self.flag.data[nei_i, nei_j, nei_k] & TypeEmpty:
-                        self.flag.data[nei_i, nei_j, nei_k] &= ~TypeEmpty
-                        self.flag.data[nei_i, nei_j, nei_k] |= TypeInterface
-                        self.mass.data[nei_i, nei_j, nei_k] = 0.0
-                        self.fraction.data[nei_i, nei_j, nei_k] = 0.0
-                        self.interpolate_empty_cell(nei_i, nei_j, nei_k)
-                    elif self.flag.data[nei_i, nei_j, nei_k] & TypeInterfaceToEmpty:
-                        self.flag.data[nei_i, nei_j, nei_k] &= ~TypeInterfaceToEmpty
-                        self.flag.data[nei_i, nei_j, nei_k] |= TypeInterface
+                    if not (i == nei_i and j == nei_j and k == nei_k):
+                        if self.flag.data[nei_i, nei_j, nei_k] & TypeEmpty:
+                            self.flag.data[nei_i, nei_j, nei_k] &= ~TypeEmpty
+                            self.flag.data[nei_i, nei_j, nei_k] |= TypeInterface
+                            self.mass.data[nei_i, nei_j, nei_k] = 0.0
+                            self.fraction.data[nei_i, nei_j, nei_k] = 0.0
+                            self.interpolate_empty_cell(nei_i, nei_j, nei_k)
+                        elif self.flag.data[nei_i, nei_j, nei_k] & TypeInterfaceToEmpty:
+                            self.flag.data[nei_i, nei_j, nei_k] &= ~TypeInterfaceToEmpty
+                            self.flag.data[nei_i, nei_j, nei_k] |= TypeInterface
 
         # deal with interface to empty secondly
         for i, j, k in ti.ndrange((1, self.nx - 1), (1, self.ny - 1), (1, self.nz - 1)):
@@ -413,14 +406,12 @@ class LBMSolver:
                     nei_i = i + e[q, 0]
                     nei_j = j + e[q, 1]
                     nei_k = k + e[q, 2]
-                    if i == nei_i and j == nei_j and k == nei_k:
-                        continue
-
-                    if self.flag.data[nei_i, nei_j, nei_k] & TypeFluid:
-                        self.flag.data[nei_i, nei_j, nei_k] &= ~TypeFluid
-                        self.flag.data[nei_i, nei_j, nei_k] |= TypeInterface
-                        self.mass.data[nei_i, nei_j, nei_k] = self.get_density(nei_i, nei_j, nei_k)
-                        self.fraction.data[nei_i, nei_j, nei_k] = 1.0
+                    if not (i == nei_i and j == nei_j and k == nei_k):
+                        if self.flag.data[nei_i, nei_j, nei_k] & TypeFluid:
+                            self.flag.data[nei_i, nei_j, nei_k] &= ~TypeFluid
+                            self.flag.data[nei_i, nei_j, nei_k] |= TypeInterface
+                            self.mass.data[nei_i, nei_j, nei_k] = self.get_density(nei_i, nei_j, nei_k)
+                            self.fraction.data[nei_i, nei_j, nei_k] = 1.0
 
     @ti.kernel
     def distribute_mass(self):
@@ -582,23 +573,21 @@ class LBMSolver:
                     nei_i = i - e[q, 0]
                     nei_j = j - e[q, 1]
                     nei_k = k - e[q, 2]
-                    if nei_i == i and nei_j == j and nei_k == k:
-                        continue
+                    if not (nei_i == i and nei_j == j and nei_k == k):
+                        is_empty_adjacent = self.flag.data[nei_i, nei_j, nei_k] & TypeEmpty
+                        has_fluid_neighbors = has_fluid_neighbors or self.flag.data[nei_i, nei_j, nei_k] & TypeFluid
+                        has_empty_neighbors = has_empty_neighbors or self.flag.data[nei_i, nei_j, nei_k] & TypeEmpty
 
-                    is_empty_adjacent = self.flag.data[nei_i, nei_j, nei_k] & TypeEmpty
-                    has_fluid_neighbors = has_fluid_neighbors or self.flag.data[nei_i, nei_j, nei_k] & TypeFluid
-                    has_empty_neighbors = has_empty_neighbors or self.flag.data[nei_i, nei_j, nei_k] & TypeEmpty
-
-                    inv = self.inverse_q(q)
-                    dot_product = normal[0] * e[inv, 0] + normal[1] * e[inv, 1] + normal[2] * e[inv, 2]
-                    is_normal_direction = dot_product > 0.0
-                    # reconstruct distributions for normal directions and empty-cell directions
-                    if is_empty_adjacent or is_normal_direction:
-                        atmospheric_pressure = 1.0
-                        cur_density = self.get_density(i, j, k)
-                        cur_vel = self.get_vel(i, j, k, cur_density)
-                        feq = self.get_feq(atmospheric_pressure, cur_vel)
-                        self.stream_field.data[i, j, k, q] = feq[inv] + feq[q] - self.collision_field.data[i, j, k, inv]
+                        inv = self.inverse_q(q)
+                        dot_product = normal[0] * e[inv, 0] + normal[1] * e[inv, 1] + normal[2] * e[inv, 2]
+                        is_normal_direction = dot_product > 0.0
+                        # reconstruct distributions for normal directions and empty-cell directions
+                        if is_empty_adjacent or is_normal_direction:
+                            atmospheric_pressure = 1.0
+                            cur_density = self.get_density(i, j, k)
+                            cur_vel = self.get_vel(i, j, k, cur_density)
+                            feq = self.get_feq(atmospheric_pressure, cur_vel)
+                            self.stream_field.data[i, j, k, q] = feq[inv] + feq[q] - self.collision_field.data[i, j, k, inv]
 
                 # set neighbors information
                 is_standard_cell = has_empty_neighbors and has_fluid_neighbors
@@ -620,16 +609,15 @@ class LBMSolver:
                     nei_i = i + e[q, 0]
                     nei_j = j + e[q, 1]
                     nei_k = k + e[q, 2]
-                    if nei_i == i and nei_j == j and nei_k == k:
-                        continue
-                    if self.flag.data[nei_i, nei_j, nei_k] & TypeFluid:
-                        inv = self.inverse_q(q)
-                        delta_mass += self.collision_field.data[nei_i, nei_j, nei_k, inv] - \
-                                      self.collision_field.data[i, j, k, q]
-                    elif self.flag.data[nei_i, nei_j, nei_k] & TypeInterface:
-                        nei_fraction = self.get_fraction(nei_i, nei_j, nei_k)
-                        s_e = self.calculate_se(i, j, k, q)
-                        delta_mass += 0.5 * s_e * (cur_fraction + nei_fraction)
+                    if not (nei_i == i and nei_j == j and nei_k == k):
+                        if self.flag.data[nei_i, nei_j, nei_k] & TypeFluid:
+                            inv = self.inverse_q(q)
+                            delta_mass += self.collision_field.data[nei_i, nei_j, nei_k, inv] - \
+                                          self.collision_field.data[i, j, k, q]
+                        elif self.flag.data[nei_i, nei_j, nei_k] & TypeInterface:
+                            nei_fraction = self.get_fraction(nei_i, nei_j, nei_k)
+                            s_e = self.calculate_se(i, j, k, q)
+                            delta_mass += 0.5 * s_e * (cur_fraction + nei_fraction)
 
             self.mass.data[i, j, k] += delta_mass
 
@@ -748,6 +736,3 @@ class LBMSolver:
             # self.copy_data_to_host()
 
             t += self.step_size[None]
-
-
-
