@@ -14,7 +14,7 @@ import numpy as np
 from read_obj import read_obj
 points, cells = read_obj("Dragon_50k.obj")
 
-np.savetxt("Dragon_50k.txt",points)
+np.savetxt("output_obj.txt",points)
 print("读入obj完毕，输出output_obj.txt")
 
 
