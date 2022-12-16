@@ -1,0 +1,3 @@
+[submodule "src/algorithm/SPH/SPH_Taichi"]
+	path = src/algorithm/SPH/SPH_Taichi
+	url = https://github.com/chunleili/SPH_Taichi
